@@ -41,6 +41,9 @@ import com.android.skg.finapp.ui.components.ConfirmDialog
 import com.android.skg.finapp.ui.components.PinAuthDialog
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,9 +107,20 @@ fun ExportImportScreen(
 
     fun shareFile(fileName: String, content: String, mimeType: String) {
         val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-        val file = File(dir, fileName)
-        file.writeText(content)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+
+        // Append a timestamp to the filename before the extension (if any)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val fileWithTimestamp = if (fileName.contains('.')) {
+            val idx = fileName.lastIndexOf('.')
+            val base = fileName.substring(0, idx)
+            val ext = fileName.substring(idx) // includes the dot
+            File(dir, "${base}_$timestamp$ext")
+        } else {
+            File(dir, "${fileName}_$timestamp")
+        }
+
+        fileWithTimestamp.writeText(content)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", fileWithTimestamp)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = mimeType
             putExtra(Intent.EXTRA_STREAM, uri)

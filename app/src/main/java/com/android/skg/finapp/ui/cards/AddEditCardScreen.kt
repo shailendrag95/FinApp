@@ -63,6 +63,7 @@ fun AddEditCardScreen(
     var isLTF by remember { mutableStateOf(false) }
     var cardType by remember { mutableStateOf(CardType.OTHER) }
     var existingCard by remember { mutableStateOf<CreditCard?>(null) }
+    var showScanner by remember { mutableStateOf(false) }
 
     LaunchedEffect(cardId) {
         if (cardId != null) {
@@ -90,14 +91,29 @@ fun AddEditCardScreen(
             TopAppBar(title = { Text(if (cardId == null) "Add Card" else "Edit Card") })
         },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        if (showScanner) {
+            CardScannerScreen(
+                onCancel = { showScanner = false },
+                onCardScanned = { scannedCardNumber, scannedHolderName, scannedExpiry ->
+                    cardNumber = scannedCardNumber
+                    if (scannedHolderName.isNotEmpty()) {
+                        holderName = scannedHolderName
+                    }
+                    if (scannedExpiry.isNotEmpty()) {
+                        expiry = scannedExpiry
+                    }
+                    showScanner = false
+                },
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             OutlinedTextField(
                 value = nickname,
                 onValueChange = { nickname = it },
@@ -247,6 +263,12 @@ fun AddEditCardScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
+                onClick = { showScanner = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Scan Card")
+            }
+            Button(
                 onClick = {
                     val card = CreditCard(
                         id = existingCard?.id ?: 0,
@@ -279,6 +301,7 @@ fun AddEditCardScreen(
             ) {
                 Text("Save Card")
             }
+        }
         }
     }
 }
