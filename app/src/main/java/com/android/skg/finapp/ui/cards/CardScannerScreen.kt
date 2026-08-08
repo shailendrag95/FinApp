@@ -1,38 +1,63 @@
 package com.android.skg.finapp.ui.cards
 
-import android.graphics.BitmapFactory
+import android.Manifest
+import android.content.pm.PackageManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.mlkit.vision.MlKitAnalyzer
+import androidx.camera.view.CameraController
+import androidx.camera.view.LifecycleCameraController
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
-import com.google.mlkit.vision.common.InputImage
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import java.io.File
-import java.util.concurrent.Executors
+import kotlin.math.abs
+
+private const val TAG = "CardScanner"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,21 +66,75 @@ fun CardScannerScreen(
     onCardScanned: (cardNumber: String, holderName: String, expiry: String) -> Unit,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var statusMessage by remember { mutableStateOf<String?>(null) }
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture(),
-    ) { success ->
-        if (success) {
-            statusMessage = "Processing image..."
-            val imageFile = File(context.cacheDir, "card_scan.jpg")
-            if (imageFile.exists()) {
-                processCardImage(imageFile, onCardScanned) { message ->
-                    statusMessage = message
+    // State for recognized details to show in editable fields
+    var scannedCardNumber by remember { mutableStateOf("") }
+    var scannedHolderName by remember { mutableStateOf("") }
+    var scannedExpiry by remember { mutableStateOf("") }
+    var isFlashOn by remember { mutableStateOf(false) }
+
+    val controller = remember {
+        LifecycleCameraController(context).apply {
+            setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+        if (!isGranted) {
+            statusMessage = "Camera permission is required to scan cards"
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission) {
+        if (hasCameraPermission) {
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            controller.setImageAnalysisAnalyzer(
+                ContextCompat.getMainExecutor(context),
+                MlKitAnalyzer(
+                    listOf(recognizer),
+                    CameraController.COORDINATE_SYSTEM_VIEW_REFERENCED,
+                    ContextCompat.getMainExecutor(context)
+                ) { result ->
+                    val visionText = result.getValue(recognizer)
+                    if (visionText != null) {
+                        val (cardNumber, holderName, expiry) = extractCardDetails(visionText)
+                        
+                        if (cardNumber.isNotEmpty() && scannedCardNumber.isEmpty()) {
+                            scannedCardNumber = cardNumber
+                        }
+                        if (holderName.isNotEmpty() && scannedHolderName.isEmpty()) {
+                            scannedHolderName = holderName
+                        }
+                        if (expiry.isNotEmpty() && scannedExpiry.isEmpty()) {
+                            scannedExpiry = expiry
+                        }
+
+                        if (scannedCardNumber.length >= 15) {
+                            statusMessage = "Card detected! Please verify and edit if needed."
+                        }
+                    }
                 }
-            }
-        } else {
-            statusMessage = "Camera cancelled"
+            )
+            controller.bindToLifecycle(lifecycleOwner)
         }
     }
 
@@ -68,6 +147,17 @@ fun CardScannerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { 
+                        isFlashOn = !isFlashOn
+                        controller.enableTorch(isFlashOn)
+                    }) {
+                        Icon(
+                            if (isFlashOn) Icons.Default.FlashOff else Icons.Default.FlashOn,
+                            contentDescription = "Toggle Flash"
+                        )
+                    }
+                }
             )
         },
     ) { padding ->
@@ -75,111 +165,204 @@ fun CardScannerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentAlignment = Alignment.Center,
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text("Scan your credit card", style = MaterialTheme.typography.titleMedium)
-
-                statusMessage?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall)
-                }
-
-                Button(
-                    onClick = {
-                        val imageFile = File(context.cacheDir, "card_scan.jpg")
-                        val imageUri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            imageFile,
-                        )
-                        cameraLauncher.launch(imageUri)
-                    },
-                ) {
-                    Text("Capture with Camera")
-                }
-
-                Button(onClick = onCancel) {
-                    Text("Cancel")
-                }
-            }
-        }
-    }
-}
-
-private fun processCardImage(
-    imageFile: File,
-    onCardScanned: (cardNumber: String, holderName: String, expiry: String) -> Unit,
-    onStatusMessage: (String?) -> Unit,
-) {
-    val executor = Executors.newSingleThreadExecutor()
-    executor.execute {
-        try {
-            val bitmap = BitmapFactory.decodeFile(imageFile.absolutePath)
-            if (bitmap != null) {
-                val inputImage = InputImage.fromBitmap(bitmap, 0)
-                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-
-                recognizer.process(inputImage)
-                    .addOnSuccessListener { visionText ->
-                        val recognizedText = visionText.text
-                        val (cardNumber, holderName, expiry) = extractCardDetails(recognizedText)
-
-                        if (cardNumber.isNotEmpty()) {
-                            onStatusMessage(null)
-                            onCardScanned(cardNumber, holderName, expiry)
-                        } else {
-                            onStatusMessage("No card detected. Please try again.")
+            if (hasCameraPermission) {
+                AndroidView(
+                    factory = { ctx ->
+                        PreviewView(ctx).apply {
+                            this.controller = controller
                         }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Overlay with card guide
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.9f)
+                            .height(220.dp)
+                            .border(2.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                            .background(Color.Black.copy(alpha = 0.1f))
+                    )
+                }
+
+                // Scanning Indicator
+                if (scannedCardNumber.isEmpty()) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 16.dp)
+                            .size(24.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 2.dp
+                    )
+                }
+
+                // Scanning Results and Status Panel
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.8f))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        statusMessage ?: "Position card within the frame",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    // Card Number Field
+                    OutlinedTextField(
+                        value = scannedCardNumber,
+                        onValueChange = { scannedCardNumber = it.filter { c -> c.isDigit() } },
+                        label = { Text("Card Number", color = Color.White.copy(alpha = 0.7f)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                        ),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Holder Name Field
+                        OutlinedTextField(
+                            value = scannedHolderName,
+                            onValueChange = { scannedHolderName = it },
+                            label = { Text("Holder Name", color = Color.White.copy(alpha = 0.7f)) },
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                            ),
+                            singleLine = true
+                        )
+
+                        // Expiry Field
+                        OutlinedTextField(
+                            value = scannedExpiry,
+                            onValueChange = { scannedExpiry = it.filter { c -> c.isDigit() } },
+                            label = { Text("Expiry", color = Color.White.copy(alpha = 0.7f)) },
+                            modifier = Modifier.weight(0.5f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true
+                        )
                     }
-                    .addOnFailureListener {
-                        onStatusMessage("Recognition failed: ${it.localizedMessage}")
+
+                    Button(
+                        onClick = {
+                            onCardScanned(scannedCardNumber, scannedHolderName, scannedExpiry)
+                        },
+                        enabled = scannedCardNumber.length >= 15,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Done")
                     }
+                }
             } else {
-                onStatusMessage("Failed to load image")
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(statusMessage ?: "Requesting permission...")
+                }
             }
-        } catch (e: Exception) {
-            onStatusMessage("Error: ${e.localizedMessage}")
         }
     }
 }
 
-private fun extractCardDetails(text: String): Triple<String, String, String> {
+private fun extractCardDetails(visionText: Text): Triple<String, String, String> {
     var cardNumber = ""
     var holderName = ""
     var expiry = ""
 
-    val lines = text.split("\n").map { it.trim() }
+    val fullText = visionText.text.uppercase()
+    Log.d(TAG, "OCR raw text: $fullText")
 
-    // Extract card number: look for 16 consecutive digits
-    val cardNumberRegex = Regex("\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}|\\d{16}")
-    for (line in lines) {
-        val match = cardNumberRegex.find(line)
-        if (match != null) {
-            cardNumber = match.value.filter { it.isDigit() }
-            if (cardNumber.length == 16) break
+    // 1. Better Card Number Detection (Horizontal & Vertical)
+    val digitElements = visionText.textBlocks.flatMap { it.lines }.flatMap { it.elements }
+        .filter { it.text.any { char -> char.isDigit() } }
+
+    // Try Horizontal Groups (Standard)
+    val horizontalCandidates = mutableListOf<String>()
+    visionText.textBlocks.forEach { block ->
+        val text = block.text.replace("\n", " ").filter { it.isDigit() || it == ' ' || it == '-' }
+        horizontalCandidates.add(text.filter { it.isDigit() })
+    }
+
+    // Try Vertical Groups (for Vertical Cards)
+    val verticalCandidates = mutableListOf<String>()
+    // Since X might vary slightly, use a tolerance
+    val tolerantXGroups = mutableMapOf<Int, MutableList<Text.Element>>()
+    digitElements.forEach { element ->
+        val centerX = element.boundingBox?.centerX() ?: 0
+        val group = tolerantXGroups.keys.find { abs(it - centerX) < 20 }
+        if (group != null) {
+            tolerantXGroups[group]?.add(element)
+        } else {
+            tolerantXGroups[centerX] = mutableListOf(element)
+        }
+    }
+    
+    tolerantXGroups.values.forEach { group ->
+        val verticalText = group.sortedBy { it.boundingBox?.centerY() ?: 0 }
+            .joinToString("") { it.text }
+            .filter { it.isDigit() }
+        verticalCandidates.add(verticalText)
+    }
+
+    val allCandidates = (horizontalCandidates + verticalCandidates)
+        .filter { it.length in 13..19 }
+
+    // Find best candidate via Luhn
+    for (candidate in allCandidates) {
+        val clean = candidate.filter { it.isDigit() }
+        if (clean.length in 15..16) {
+            if (isValidLuhn(clean)) {
+                cardNumber = clean
+                break
+            } else if (cardNumber.isEmpty()) {
+                cardNumber = clean
+            }
         }
     }
 
-    // Extract expiry: look for MM/YY or MMYY pattern
-    val expiryRegex = Regex("(0[1-9]|1[0-2])/?\\d{2}")
-    for (line in lines) {
+    val allLines = visionText.textBlocks.flatMap { it.lines }.map { it.text.trim().uppercase() }
+
+    // 2. Extract Expiry (MM/YY or MMYY)
+    val expiryRegex = Regex("(0[1-9]|1[0-2])[ /]?(\\d{2})")
+    for (line in allLines) {
         val match = expiryRegex.find(line)
         if (match != null) {
-            expiry = match.value.filter { it.isDigit() }.take(4)
+            expiry = match.groupValues[1] + match.groupValues[2]
             break
         }
     }
 
-    // Extract holder name: typically on a separate line, letters and spaces
-    val nameRegex = Regex("[A-Z][A-Z\\s]{5,}")
-    for (line in lines) {
+    // 3. Extract Holder Name
+    val nameBlacklist = listOf("VISA", "MASTERCARD", "RUPAY", "AMEX", "CREDIT", "DEBIT", "BANK", "VALID", "FROM", "THRU", "EXPIRES", "SELECT")
+    val nameRegex = Regex("^[A-Z]{2,15}(?: [A-Z]{2,15}){1,2}$")
+    
+    for (line in allLines) {
         if (line.length > 5 && !line.contains(Regex("\\d"))) {
-            if (nameRegex.containsMatchIn(line)) {
-                holderName = line.uppercase()
+            val isBlacklisted = nameBlacklist.any { line.contains(it) }
+            if (!isBlacklisted && nameRegex.matches(line)) {
+                holderName = line
                 break
             }
         }
@@ -188,4 +371,20 @@ private fun extractCardDetails(text: String): Triple<String, String, String> {
     return Triple(cardNumber, holderName, expiry)
 }
 
+private fun isValidLuhn(number: String): Boolean {
+    var sum = 0
+    var alternate = false
+    for (i in number.length - 1 downTo 0) {
+        var n = number[i].digitToInt()
+        if (alternate) {
+            n *= 2
+            if (n > 9) {
+                n = (n % 10) + 1
+            }
+        }
+        sum += n
+        alternate = !alternate
+    }
+    return (sum % 10 == 0)
+}
 
