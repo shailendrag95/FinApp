@@ -203,12 +203,29 @@ private fun CardListItem(card: CreditCard, onClick: () -> Unit) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom,
                     ) {
-                        Text(
-                            card.holderName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        Column {
+                            Text(
+                                card.holderName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = Color.White.copy(alpha = 0.18f),
+                                        shape = RoundedCornerShape(6.dp),
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    card.network.displayName.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
 
                         Column(horizontalAlignment = Alignment.End) {
                             Text(

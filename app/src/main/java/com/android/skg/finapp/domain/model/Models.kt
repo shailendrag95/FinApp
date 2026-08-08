@@ -9,13 +9,10 @@ enum class CardNetwork(val displayName: String) {
 }
 
 enum class CardType(val displayName: String) {
-    VISA("Visa"),
-    MASTERCARD("Mastercard"),
-    RUPAY("RuPay"),
-    AMEX("American Express"),
-    DINERS("Diners Club"),
-    DISCOVER("Discover"),
-    JCB("JCB"),
+    CREDIT("Credit"),
+    DEBIT("Debit"),
+    MEAL("Meal"),
+    COMMUNICATION("Communication"),
     OTHER("Other"),
 }
 
