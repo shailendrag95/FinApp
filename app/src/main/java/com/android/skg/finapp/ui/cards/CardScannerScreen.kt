@@ -296,22 +296,32 @@ private fun extractCardDetails(visionText: Text): Triple<String, String, String>
 
     // 1. Better Card Number Detection (Horizontal & Vertical)
     val digitElements = visionText.textBlocks.flatMap { it.lines }.flatMap { it.elements }
-        .filter { it.text.any { char -> char.isDigit() } }
+        .filter { it.text.any { char -> char.isDigit() || char == 'I' || char == 'L' || char == 'O' || char == 'S' } }
 
     // Try Horizontal Groups (Standard)
     val horizontalCandidates = mutableListOf<String>()
     visionText.textBlocks.forEach { block ->
-        val text = block.text.replace("\n", " ").filter { it.isDigit() || it == ' ' || it == '-' }
+        val text = block.text.replace("\n", " ")
+            .map { char ->
+                when (char) {
+                    'O' -> '0'
+                    'I', 'L' -> '1'
+                    'S' -> '5'
+                    else -> char
+                }
+            }.joinToString("")
+            .filter { it.isDigit() || it == ' ' || it == '-' }
         horizontalCandidates.add(text.filter { it.isDigit() })
     }
 
     // Try Vertical Groups (for Vertical Cards)
     val verticalCandidates = mutableListOf<String>()
-    // Since X might vary slightly, use a tolerance
+    // Since X might vary slightly, use a larger tolerance for grouping
     val tolerantXGroups = mutableMapOf<Int, MutableList<Text.Element>>()
     digitElements.forEach { element ->
         val centerX = element.boundingBox?.centerX() ?: 0
-        val group = tolerantXGroups.keys.find { abs(it - centerX) < 20 }
+        // Increase tolerance to 40 pixels for different resolutions/alignments
+        val group = tolerantXGroups.keys.find { abs(it - centerX) < 40 }
         if (group != null) {
             tolerantXGroups[group]?.add(element)
         } else {
@@ -321,25 +331,54 @@ private fun extractCardDetails(visionText: Text): Triple<String, String, String>
     
     tolerantXGroups.values.forEach { group ->
         val verticalText = group.sortedBy { it.boundingBox?.centerY() ?: 0 }
-            .joinToString("") { it.text }
+            .joinToString("") { element ->
+                element.text.map { char ->
+                    when (char) {
+                        'O' -> '0'
+                        'I', 'L' -> '1'
+                        'S' -> '5'
+                        else -> char
+                    }
+                }.joinToString("")
+            }
             .filter { it.isDigit() }
+        
+        Log.d(TAG, "Vertical candidate found: $verticalText")
         verticalCandidates.add(verticalText)
     }
 
     val allCandidates = (horizontalCandidates + verticalCandidates)
-        .filter { it.length in 13..19 }
+        .flatMap { candidate ->
+            // Sliding window to find 15-16 digit sequences within longer strings
+            val digitsOnly = candidate.filter { it.isDigit() }
+            val sequences = mutableListOf<String>()
+            if (digitsOnly.length >= 15) {
+                for (i in 0..digitsOnly.length - 15) {
+                    sequences.add(digitsOnly.substring(i, (i + 15).coerceAtMost(digitsOnly.length)))
+                    if (i + 16 <= digitsOnly.length) {
+                        sequences.add(digitsOnly.substring(i, i + 16))
+                    }
+                }
+            }
+            sequences
+        }.distinct()
+
+    Log.d(TAG, "All digit sequences: $allCandidates")
 
     // Find best candidate via Luhn
+    var bestCandidate = ""
     for (candidate in allCandidates) {
-        val clean = candidate.filter { it.isDigit() }
-        if (clean.length in 15..16) {
-            if (isValidLuhn(clean)) {
-                cardNumber = clean
-                break
-            } else if (cardNumber.isEmpty()) {
-                cardNumber = clean
-            }
+        if (isValidLuhn(candidate)) {
+            bestCandidate = candidate
+            break
         }
+    }
+    
+    if (bestCandidate.isNotEmpty()) {
+        cardNumber = bestCandidate
+    } else if (allCandidates.isNotEmpty()) {
+        // Fallback to the longest sequence if none pass Luhn
+        cardNumber = allCandidates.maxByOrNull { it.length } ?: ""
     }
 
     val allLines = visionText.textBlocks.flatMap { it.lines }.map { it.text.trim().uppercase() }
