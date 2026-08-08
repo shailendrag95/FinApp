@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.finapp"
+    namespace = "com.android.skg.finapp"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.finapp"
+        applicationId = "com.android.skg.finapp"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
