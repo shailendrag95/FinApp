@@ -16,6 +16,9 @@ class CreditCardRepository(
     fun observeCards(): Flow<List<CreditCard>> =
         dao.observeAll().map { entities -> entities.map { it.toDomain() } }
 
+    fun searchCards(query: String): Flow<List<CreditCard>> =
+        dao.searchCards(query).map { entities -> entities.map { it.toDomain() } }
+
     suspend fun getCard(id: Long): CreditCard? =
         dao.getById(id)?.toDomain()
 
@@ -46,7 +49,7 @@ class CreditCardRepository(
         holderName = holderName,
         expiry = expiry,
         cvv = encryptionHelper.decrypt(cvvEnc),
-        network = CardNetwork.valueOf(network),
+        network = try { CardNetwork.valueOf(network) } catch (e: Exception) { CardNetwork.OTHER },
         bank = bank,
         dueDateDay = dueDateDay,
         creditLimit = creditLimit,

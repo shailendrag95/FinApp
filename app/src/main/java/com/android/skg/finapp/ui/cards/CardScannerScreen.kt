@@ -221,7 +221,11 @@ fun CardScannerScreen(
                     // Card Number Field
                     OutlinedTextField(
                         value = scannedCardNumber,
-                        onValueChange = { scannedCardNumber = it.filter { c -> c.isDigit() } },
+                        onValueChange = { 
+                            if (it.length <= 16) {
+                                scannedCardNumber = it.filter { c -> c.isDigit() }
+                            }
+                        },
                         label = { Text("Card Number", color = Color.White.copy(alpha = 0.7f)) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -394,7 +398,7 @@ private fun extractCardDetails(visionText: Text): Triple<String, String, String>
     }
 
     // 3. Extract Holder Name
-    val nameBlacklist = listOf("VISA", "MASTERCARD", "RUPAY", "AMEX", "CREDIT", "DEBIT", "BANK", "VALID", "FROM", "THRU", "EXPIRES", "SELECT")
+    val nameBlacklist = listOf("VISA", "MASTERCARD", "RUPAY", "CREDIT", "DEBIT", "BANK", "VALID", "FROM", "THRU", "EXPIRES", "SELECT")
     val nameRegex = Regex("^[A-Z]{2,15}(?: [A-Z]{2,15}){1,2}$")
     
     for (line in allLines) {

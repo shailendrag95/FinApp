@@ -13,6 +13,7 @@ sealed class Screen(val route: String) {
     data object Banks : Screen("banks")
     data object Settings : Screen("settings")
     data object CardAdd : Screen("card_add")
+    data object CardScan : Screen("card_scan")
     data object CardEdit : Screen("card_edit/{cardId}") {
         fun createRoute(cardId: Long) = "card_edit/$cardId"
     }

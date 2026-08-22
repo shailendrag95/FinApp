@@ -89,6 +89,7 @@ fun FinAppRoot() {
             ) {
                 CardsListScreen(
                     onAddCard = { navController.navigate(Screen.CardAdd.route) },
+                    onScanCard = { navController.navigate(Screen.CardScan.route) },
                     onCardClick = { navController.navigate(Screen.CardDetail.createRoute(it)) },
                 )
             }
@@ -132,6 +133,13 @@ fun FinAppRoot() {
         }
         composable(Screen.CardAdd.route) {
             AddEditCardScreen(cardId = null, onDone = { navController.popBackStack() })
+        }
+        composable(Screen.CardScan.route) {
+            AddEditCardScreen(
+                cardId = null,
+                startWithScanner = true,
+                onDone = { navController.popBackStack() }
+            )
         }
         composable(
             route = Screen.CardEdit.route,

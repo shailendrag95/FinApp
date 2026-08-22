@@ -4,7 +4,6 @@ enum class CardNetwork(val displayName: String) {
     VISA("Visa"),
     MASTERCARD("Mastercard"),
     RUPAY("RuPay"),
-    AMEX("Amex"),
     OTHER("Other"),
 }
 
@@ -27,6 +26,15 @@ enum class TransactionCategory(val displayName: String) {
     SHOPPING("Shopping"),
     BILLS("Bills"),
     OTHER("Other"),
+}
+
+enum class CardSortOrder(val displayName: String) {
+    NICKNAME_ASC("Nickname (A-Z)"),
+    NICKNAME_DESC("Nickname (Z-A)"),
+    BANK_ASC("Bank (A-Z)"),
+    BANK_DESC("Bank (Z-A)"),
+    NEWEST_ADDED("Newest Added"),
+    EXPIRY_SOONEST("Expiring Soonest"),
 }
 
 data class CreditCard(

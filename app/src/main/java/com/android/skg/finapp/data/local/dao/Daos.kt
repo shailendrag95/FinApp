@@ -16,6 +16,9 @@ interface CreditCardDao {
     @Query("SELECT * FROM credit_cards ORDER BY nickname ASC")
     fun observeAll(): Flow<List<CreditCardEntity>>
 
+    @Query("SELECT * FROM credit_cards WHERE bank LIKE '%' || :query || '%' OR nickname LIKE '%' || :query || '%' ORDER BY nickname ASC")
+    fun searchCards(query: String): Flow<List<CreditCardEntity>>
+
     @Query("SELECT * FROM credit_cards ORDER BY nickname ASC")
     suspend fun getAll(): List<CreditCardEntity>
 

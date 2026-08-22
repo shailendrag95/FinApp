@@ -11,12 +11,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -43,6 +47,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddEditCardScreen(
     cardId: Long?,
+    startWithScanner: Boolean = false,
     onDone: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -63,7 +68,7 @@ fun AddEditCardScreen(
     var isLTF by remember { mutableStateOf(false) }
     var cardType by remember { mutableStateOf(CardType.OTHER) }
     var existingCard by remember { mutableStateOf<CreditCard?>(null) }
-    var showScanner by remember { mutableStateOf(false) }
+    var showScanner by remember { mutableStateOf(startWithScanner) }
 
     LaunchedEffect(cardId) {
         if (cardId != null) {
@@ -88,7 +93,14 @@ fun AddEditCardScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(if (cardId == null) "Add Card" else "Edit Card") })
+            TopAppBar(
+                title = { Text(if (cardId == null) "Add Card" else "Edit Card") },
+                actions = {
+                    IconButton(onClick = { showScanner = true }) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Scan Card")
+                    }
+                }
+            )
         },
     ) { padding ->
         if (showScanner) {
@@ -123,7 +135,12 @@ fun AddEditCardScreen(
             )
             OutlinedTextField(
                 value = cardNumber,
-                onValueChange = { if (it.length <= 19) cardNumber = it.filter { c -> c.isDigit() || c == ' ' } },
+                onValueChange = { 
+                    val digits = it.filter { c -> c.isDigit() }
+                    if (digits.length <= 16) {
+                        cardNumber = it.filter { c -> c.isDigit() || c == ' ' }
+                    }
+                },
                 label = { Text("Card Number") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
@@ -194,7 +211,7 @@ fun AddEditCardScreen(
                 )
                 OutlinedTextField(
                     value = cvv,
-                    onValueChange = { if (it.length <= 4) cvv = it.filter { c -> c.isDigit() } },
+                    onValueChange = { if (it.length <= 3) cvv = it.filter { c -> c.isDigit() } },
                     label = { Text("CVV") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     modifier = Modifier.weight(1f),
@@ -262,12 +279,6 @@ fun AddEditCardScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { showScanner = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Scan Card")
-            }
             Button(
                 onClick = {
                     val card = CreditCard(
